@@ -27,7 +27,6 @@ for m in st.session_state.messages:
 def call_api(user_text: str):
     if not api_url_ui:
         return "❗Please set API URL in the sidebar."
-
     if not DATABRICKS_TOKEN:
         return "❗Missing DATABRICKS_TOKEN. Add it in Streamlit → Settings → Secrets."
 
@@ -36,18 +35,23 @@ def call_api(user_text: str):
         "Authorization": f"Bearer {DATABRICKS_TOKEN}",
     }
 
-    payload = {"question": user_text}
+    payload = {
+        "dataframe_split": {
+            "columns": ["question"],
+            "data": [[user_text]]
+        }
+    }
+
+    st.sidebar.write("Sending payload:", payload)  # TEMP debug
 
     try:
         r = requests.post(api_url_ui, headers=headers, json=payload, timeout=timeout_s)
         r.raise_for_status()
         data = r.json()
 
-        # Try common reply fields
-        if isinstance(data, dict):
-            for k in ["reply", "answer", "response", "result", "output"]:
-                if k in data:
-                    return str(data[k])
+        if isinstance(data, dict) and "predictions" in data:
+            preds = data["predictions"]
+            return str(preds[0]) if isinstance(preds, list) and preds else str(preds)
 
         return f"✅ API responded. Raw:\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
@@ -55,6 +59,7 @@ def call_api(user_text: str):
         return f"❌ HTTP error: {e}\n\nResponse text:\n```\n{r.text}\n```"
     except Exception as e:
         return f"❌ Error calling API: {e}"
+
 
 prompt = st.chat_input("Type your message…")
 if prompt:
