@@ -35,23 +35,25 @@ def call_api(user_text: str):
         "Authorization": f"Bearer {DATABRICKS_TOKEN}",
     }
 
-    payload = {
-        "dataframe_split": {
-            "columns": ["question"],
-            "data": [[user_text]]
-        }
-    }
-
-    st.sidebar.write("Sending payload:", payload)  # TEMP debug
+    payload = {"dataframe_records": [{"question": user_text}]}
 
     try:
         r = requests.post(api_url_ui, headers=headers, json=payload, timeout=timeout_s)
         r.raise_for_status()
         data = r.json()
 
+        # Case 1: model returns list[dict]
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            if "answer" in data[0]:
+                return str(data[0]["answer"])
+            return f"✅ API responded. Raw list:\n\n```json\n{json.dumps(data, indent=2)}\n```"
+
+        # Case 2: Databricks wraps in predictions
         if isinstance(data, dict) and "predictions" in data:
             preds = data["predictions"]
-            return str(preds[0]) if isinstance(preds, list) and preds else str(preds)
+            if isinstance(preds, list) and preds and isinstance(preds[0], dict) and "answer" in preds[0]:
+                return str(preds[0]["answer"])
+            return f"✅ API responded. Raw predictions:\n\n```json\n{json.dumps(preds, indent=2)}\n```"
 
         return f"✅ API responded. Raw:\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
