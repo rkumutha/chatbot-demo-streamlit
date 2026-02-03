@@ -14,7 +14,7 @@ DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN", "").strip()
 with st.sidebar:
     st.header("Settings")
     api_url_ui = st.text_input("API URL", value=API_URL, placeholder="https://.../invocations")
-    timeout_s = st.slider("Timeout (seconds)", 5, 120, 30)
+    timeout_s = st.slider("Timeout (seconds)", 5, 300, 120)
     st.caption("Tip: Store API_URL and DATABRICKS_TOKEN in Streamlit Secrets.")
 
 if "messages" not in st.session_state:
@@ -25,42 +25,29 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
 
 def call_api(user_text: str):
-    """
-    Databricks Serving Endpoint contract (typical):
-    POST {API_URL}/invocations
-    Headers: Authorization: Bearer <DATABRICKS_TOKEN>
-    Body: {"inputs": "<text>"}  (sometimes list: {"inputs": ["<text>"]})
-    """
     if not api_url_ui:
         return "❗Please set API URL in the sidebar."
+
     if not DATABRICKS_TOKEN:
-        return "❗Missing DATABRICKS_TOKEN. Add it in Streamlit Secrets."
+        return "❗Missing DATABRICKS_TOKEN. Add it in Streamlit → Settings → Secrets."
 
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {DATABRICKS_TOKEN}",
     }
 
-    # Most common Databricks serving payload:
-    payload = {"inputs": user_text}
+    payload = {"question": user_text}
 
     try:
         r = requests.post(api_url_ui, headers=headers, json=payload, timeout=timeout_s)
         r.raise_for_status()
         data = r.json()
 
-        # Databricks responses vary by model / endpoint
+        # Try common reply fields
         if isinstance(data, dict):
-            if "predictions" in data:
-                preds = data["predictions"]
-                # could be list[str] or list[dict]
-                return str(preds[0]) if isinstance(preds, list) and preds else str(preds)
-            if "outputs" in data:
-                return str(data["outputs"])
-            if "reply" in data:
-                return str(data["reply"])
-            if "answer" in data:
-                return str(data["answer"])
+            for k in ["reply", "answer", "response", "result", "output"]:
+                if k in data:
+                    return str(data[k])
 
         return f"✅ API responded. Raw:\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
