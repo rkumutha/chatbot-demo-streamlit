@@ -6,66 +6,69 @@ import streamlit as st
 st.set_page_config(page_title="Chatbot Demo", page_icon="💬")
 
 st.title("💬 Chatbot Demo")
-st.caption("Demo UI (Streamlit) calling your REST API")
+st.caption("Demo UI (Streamlit) calling your Databricks REST endpoint")
 
 API_URL = os.getenv("API_URL", "").strip()
-API_KEY = os.getenv("API_KEY", "").strip()  # optional
+DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN", "").strip()
 
 with st.sidebar:
     st.header("Settings")
-    api_url_ui = st.text_input("API URL", value=API_URL, placeholder="https://your-api.com/chat")
-    st.markdown("If your API needs a key, set it as a Streamlit Secret (recommended).")
+    api_url_ui = st.text_input("API URL", value=API_URL, placeholder="https://.../invocations")
     timeout_s = st.slider("Timeout (seconds)", 5, 120, 30)
+    st.caption("Tip: Store API_URL and DATABRICKS_TOKEN in Streamlit Secrets.")
 
-# Keep messages in session
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hi! Ask me anything 🙂"}
-    ]
+    st.session_state.messages = [{"role": "assistant", "content": "Hi! Ask me anything 🙂"}]
 
-# Render history
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
 def call_api(user_text: str):
     """
-    Expected API contract (recommended):
-    POST {API_URL}
-    JSON: {"message": "<user_text>"}
-    Response JSON: {"reply": "<assistant_text>"}
+    Databricks Serving Endpoint contract (typical):
+    POST {API_URL}/invocations
+    Headers: Authorization: Bearer <DATABRICKS_TOKEN>
+    Body: {"inputs": "<text>"}  (sometimes list: {"inputs": ["<text>"]})
     """
     if not api_url_ui:
         return "❗Please set API URL in the sidebar."
+    if not DATABRICKS_TOKEN:
+        return "❗Missing DATABRICKS_TOKEN. Add it in Streamlit Secrets."
 
-    headers = {"Content-Type": "application/json"}
-    # Optional key header (customize if your API uses different header)
-    if API_KEY:
-        headers["Authorization"] = f"Bearer {API_KEY}"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+    }
 
-    payload = {"message": user_text}
+    # Most common Databricks serving payload:
+    payload = {"inputs": user_text}
 
     try:
-        r = requests.post(api_url_ui, headers=headers, data=json.dumps(payload), timeout=timeout_s)
+        r = requests.post(api_url_ui, headers=headers, json=payload, timeout=timeout_s)
         r.raise_for_status()
         data = r.json()
 
-        # flexible parsing
+        # Databricks responses vary by model / endpoint
         if isinstance(data, dict):
+            if "predictions" in data:
+                preds = data["predictions"]
+                # could be list[str] or list[dict]
+                return str(preds[0]) if isinstance(preds, list) and preds else str(preds)
+            if "outputs" in data:
+                return str(data["outputs"])
             if "reply" in data:
                 return str(data["reply"])
-            if "response" in data:
-                return str(data["response"])
             if "answer" in data:
                 return str(data["answer"])
-        return f"✅ API responded, but I couldn’t find 'reply'. Raw:\n\n```json\n{json.dumps(data, indent=2)}\n```"
+
+        return f"✅ API responded. Raw:\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
     except requests.exceptions.HTTPError as e:
         return f"❌ HTTP error: {e}\n\nResponse text:\n```\n{r.text}\n```"
     except Exception as e:
         return f"❌ Error calling API: {e}"
 
-# Input
 prompt = st.chat_input("Type your message…")
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
