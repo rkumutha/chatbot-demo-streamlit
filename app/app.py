@@ -17,8 +17,20 @@ with st.sidebar:
     timeout_s = st.slider("Timeout (seconds)", 5, 300, 120)
     st.caption("Tip: Store API_URL and DATABRICKS_TOKEN in Streamlit Secrets.")
 
+#if "messages" not in st.session_state:
+    #st.session_state.messages = [{"role": "assistant", "content": "Hi! Ask me anything 🙂"}]
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hi! Ask me anything 🙂"}]
+    st.session_state.messages = [{
+        "role": "assistant",
+        "content": (
+            "Hi! 👋 I’m here to help you understand Zurich Basics and our Code of Conduct.\n\n"
+            "You can ask questions like:\n"
+            "- What is considered unethical behavior?\n"
+            "- What should I do if I see something wrong?\n"
+            "- Who can I talk to if I’m unsure?\n\n"
+            "Feel free to ask — especially if you’re new!"
+        )
+    }]
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
